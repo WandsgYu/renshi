@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>数据版本差异比对工具</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', Arial, sans-serif;
+            background: #f4f6fb;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 900px;
+            margin: 40px auto;
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+            padding: 32px 40px 40px 40px;
+        }
+        h1 {
+            text-align: center;
+            color: #2d3a4b;
+            margin-bottom: 24px;
+        }
+        .input-area {
+            display: flex;
+            gap: 40px;
+            margin-bottom: 24px;
+        }
+        textarea {
+            width: 100%;
+            min-height: 180px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 13px;
+            resize: vertical;
+            background: #f9fafb;
+        }
+        label {
+            font-weight: bold;
+            color: #3b4252;
+            margin-bottom: 8px;
+            display: block;
+        }
+        .btn {
+            display: block;
+            width: 200px;
+            margin: 0 auto 32px auto;
+            padding: 12px 0;
+            background: linear-gradient(90deg, #4f8cff 0%, #38cfa6 100%);
+            color: #fff;
+            font-size: 18px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+        .btn:hover {
+            background: linear-gradient(90deg, #38cfa6 0%, #4f8cff 100%);
+        }
+        .result-section {
+            margin-top: 24px;
+        }
+        .result-block {
+            background: #f1f7ff;
+            border-left: 5px solid #4f8cff;
+            border-radius: 6px;
+            margin-bottom: 18px;
+            padding: 16px 20px;
+        }
+        .result-block h2 {
+            margin: 0 0 10px 0;
+            font-size: 18px;
+            color: #2d3a4b;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 8px;
+        }
+        th, td {
+            border: 1px solid #dbeafe;
+            padding: 8px 6px;
+            text-align: left;
+            font-size: 15px;
+        }
+        th {
+            background: #e0e7ff;
+            color: #374151;
+        }
+        @media (max-width: 700px) {
+            .container { padding: 16px; }
+            .input-area { flex-direction: column; gap: 12px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>人事数据版本差异比对</h1>
+        <div style="text-align:center;color:#888;font-size:13px;margin-bottom:18px;">
+            操作说明：把这三列数据（单位 姓名 身份证），按照这三列的顺序在Excel整合好后，全选数据，直接复制粘贴到下方输入框。
+        </div>
+        <div class="input-area">
+            <div style="flex:1">
+                <label for="oldData">旧版本数据</label>
+                <textarea id="oldData" placeholder="单位 姓名 身份证"></textarea>
+            </div>
+            <div style="flex:1">
+                <label for="newData">新版本数据</label>
+                <textarea id="newData" placeholder="单位 姓名 身份证"></textarea>
+            </div>
+        </div>
+        <button class="btn" onclick="compareData()">开始比对</button>
+        <div class="result-section" id="resultSection"></div>
+    </div>
+    <script>
+        function parseCSV(text) {
+            const lines = text.trim().split(/\r?\n/);
+            const data = {};
+            for (let line of lines) {
+                if (!line.trim()) continue;
+                const parts = line.trim().split(/\s+/);
+                if (parts.length !== 3) continue;
+                const [unit, name, id] = parts;
+                data[id] = { unit, name, id };
+            }
+            return data;
+        }
+
+        function compareData() {
+            const oldText = document.getElementById('oldData').value;
+            const newText = document.getElementById('newData').value;
+            const oldData = parseCSV(oldText);
+            const newData = parseCSV(newText);
+
+            // 新增
+            const added = [];
+            for (const id in newData) {
+                if (!oldData[id]) {
+                    added.push(newData[id]);
+                }
+            }
+            // 删除
+            const removed = [];
+            for (const id in oldData) {
+                if (!newData[id]) {
+                    removed.push(oldData[id]);
+                }
+            }
+            // 修改
+            const modified = [];
+            for (const id in newData) {
+                if (oldData[id] && newData[id].unit !== oldData[id].unit) {
+                    modified.push({
+                        id,
+                        name: newData[id].name,
+                        oldUnit: oldData[id].unit,
+                        newUnit: newData[id].unit
+                    });
+                }
+            }
+
+            let html = '';
+            html += renderResultBlock('新增', added, ['单位', '姓名', '身份证'], d => [d.unit, d.name, d.id]);
+            html += renderResultBlock('修改', modified, ['姓名', '身份证', '原单位', '新单位'], d => [d.name, d.id, d.oldUnit, d.newUnit]);
+            html += renderResultBlock('删除', removed, ['单位', '姓名', '身份证'], d => [d.unit, d.name, d.id]);
+
+            document.getElementById('resultSection').innerHTML = html;
+        }
+
+        function renderResultBlock(title, data, headers, rowFn) {
+            if (data.length === 0) {
+                return `<div class="result-block"><h2>${title}</h2><div style='color:#888'>无</div></div>`;
+            }
+            let table = `<table><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr>`;
+            for (const d of data) {
+                table += `<tr>${rowFn(d).map(cell=>`<td>${cell}</td>`).join('')}</tr>`;
+            }
+            table += '</table>';
+            return `<div class="result-block"><h2>${title}</h2>${table}</div>`;
+        }
+    </script>
+</body>
+</html> 
